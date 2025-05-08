@@ -4,6 +4,7 @@ from PIL import Image
 import tensorflow as tf
 import os
 import pandas as pd
+import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Class labels
@@ -29,7 +30,7 @@ MODEL_FILES = [
     "fashion_mnist_cnn_model_SGD_100.h5",
 ]
 
-# Load all models once (cached)
+# Load all models
 @st.cache_resource
 def load_models():
     models = {}
@@ -40,7 +41,7 @@ def load_models():
 
 models = load_models()
 
-# Preprocessing function (128x128 grayscale)
+# Preprocessing: 128x128 grayscale
 def preprocess_image(image: Image.Image):
     image = image.convert("L")
     image = image.resize((128, 128))
@@ -48,43 +49,36 @@ def preprocess_image(image: Image.Image):
     img_array = img_array.reshape(1, 128, 128, 1)
     return img_array
 
-# UI
-st.title("👕 Fashion MNIST – Model Comparison App")
-st.write("Upload an image to see predictions from **all models**, side-by-side.")
+# Streamlit UI
+st.title("👕 Fashion MNIST – Full Model & Class Comparison")
+st.write("Upload an image to view **class-wise confidence scores** for all models.")
 
 uploaded_file = st.file_uploader("📤 Upload a clothing image", type=["png", "jpg", "jpeg"])
 
 if uploaded_file:
     image = Image.open(uploaded_file)
-
-    # Display smaller image
     st.image(image, caption="Uploaded Image", width=200)
 
     preprocessed = preprocess_image(image)
 
-    # Collect predictions
-    rows = []
+    # Prepare full confidence matrix
+    confidence_data = []
+
     for model_name, model in models.items():
         preds = model.predict(preprocessed)[0]
-        pred_idx = np.argmax(preds)
-        pred_label = class_names[pred_idx]
-        confidence = preds[pred_idx] * 100
-        rows.append({
+        confidence_row = {
             "Model": model_name,
-            "Predicted Class": pred_label,
-            "Confidence (%)": round(confidence, 2)
-        })
+            **{class_names[i]: round(preds[i] * 100, 2) for i in range(len(class_names))}
+        }
+        confidence_data.append(confidence_row)
 
-    # Display comparison table
-    df = pd.DataFrame(rows)
-    st.subheader("📊 Prediction Table")
-    st.dataframe(df.sort_values("Confidence (%)", ascending=False), use_container_width=True)
+    df_confidence = pd.DataFrame(confidence_data)
+    st.subheader("📋 Class Confidence Table")
+    st.dataframe(df_confidence.set_index("Model"), use_container_width=True)
 
-    # Optional: Confidence chart
-    if st.checkbox("📈 Show confidence bar chart"):
-        fig, ax = plt.subplots(figsize=(8, 6))
-        df_sorted = df.sort_values("Confidence (%)", ascending=False)
-        ax.barh(df_sorted["Model"], df_sorted["Confidence (%)"], color='skyblue')
-        ax.set_xlabel("Confidence (%)")
-        ax.set_title("Top Prediction Confidence by Model")
+    # Optional: heatmap
+    if st.checkbox("📊 Show heatmap of class confidence scores"):
+        fig, ax = plt.subplots(figsize=(12, 6))
+        sns.heatmap(df_confidence.set_index("Model"), annot=True, fmt=".1f", cmap="Blues", cbar=True, ax=ax)
+        ax.set_title("Class Confidence Scores by Model")
         st.pyplot(fig)
