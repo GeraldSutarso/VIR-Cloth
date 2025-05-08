@@ -99,3 +99,30 @@ if uploaded_file:
         if st.checkbox("🔢 Show all class confidences"):
             for i, prob in enumerate(preds):
                 st.write(f"{class_names[i]}: {prob * 100:.2f}%")
+
+    st.markdown("---")
+    st.subheader("✅ Optional: Evaluate Against Ground Truth")
+
+    if st.checkbox("🧪 Provide true label to evaluate model performance"):
+        true_label = st.selectbox("Select the true class for the uploaded image:", class_names)
+
+        true_index = class_names.index(true_label)
+        evaluation_results = []
+
+        for model_name, model in models.items():
+            preds = model.predict(preprocessed)[0]
+            confidence_score = preds[true_index] * 100
+            evaluation_results.append((model_name, confidence_score))
+
+        # Sort by confidence in correct class
+        evaluation_results.sort(key=lambda x: x[1], reverse=True)
+        top3 = evaluation_results[:3]
+
+        st.markdown(f"### 🏆 Top 3 Models for '{true_label}'")
+        for i, (model_name, score) in enumerate(top3, 1):
+            st.write(f"**{i}. {model_name}** — Confidence in true label: **{score:.2f}%**")
+
+        # Optional table
+        if st.checkbox("📋 Show full model ranking"):
+            eval_df = pd.DataFrame(evaluation_results, columns=["Model", f"Confidence in '{true_label}' (%)"])
+            st.dataframe(eval_df.set_index("Model").sort_values(by=f"Confidence in '{true_label}' (%)", ascending=False))
