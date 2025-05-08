@@ -50,7 +50,7 @@ def preprocess_image(image: Image.Image):
     return img_array
 
 # App UI
-st.title("🧠 Fashion MNIST – Model Predictions")
+st.title("👕 Fashion MNIST – Model Predictions")
 st.write("Upload an image to classify it using one or more trained models.")
 
 uploaded_file = st.file_uploader("📤 Upload a clothing image", type=["png", "jpg", "jpeg"])
@@ -101,7 +101,7 @@ if uploaded_file:
                 st.write(f"{class_names[i]}: {prob * 100:.2f}%")
 
     st.markdown("---")
-    st.subheader("✅ Optional: Evaluate Against Ground Truth")
+    st.subheader("Evaluate Against Ground Truth")
 
     if st.checkbox("🧪 Provide true label to evaluate model performance"):
         true_label = st.selectbox("Select the true class for the uploaded image:", class_names)
