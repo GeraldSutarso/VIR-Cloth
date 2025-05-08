@@ -3,6 +3,8 @@ import numpy as np
 from PIL import Image
 import tensorflow as tf
 import os
+import pandas as pd
+import matplotlib.pyplot as plt
 
 # Class labels
 class_names = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat',
@@ -27,44 +29,62 @@ MODEL_FILES = [
     "fashion_mnist_cnn_model_SGD_100.h5",
 ]
 
-# Load selected model
+# Load all models once (cached)
 @st.cache_resource
-def load_model(model_file):
-    path = os.path.join(MODEL_DIR, model_file)
-    return tf.keras.models.load_model(path)
+def load_models():
+    models = {}
+    for model_file in MODEL_FILES:
+        path = os.path.join(MODEL_DIR, model_file)
+        models[model_file] = tf.keras.models.load_model(path)
+    return models
 
-# Preprocessing (from your training code: 128x128 grayscale)
+models = load_models()
+
+# Preprocessing function (128x128 grayscale)
 def preprocess_image(image: Image.Image):
-    image = image.convert("L")  # grayscale
+    image = image.convert("L")
     image = image.resize((128, 128))
     img_array = np.array(image) / 255.0
-    img_array = img_array.reshape(1, 128, 128, 1)  # Add batch and channel dims
+    img_array = img_array.reshape(1, 128, 128, 1)
     return img_array
 
-# Streamlit UI
-st.title("🧠 Fashion MNIST - Single Model Prediction")
-st.write("Upload an image and choose a model to see its prediction.")
+# UI
+st.title("👕 Fashion MNIST – Model Comparison App")
+st.write("Upload an image to see predictions from **all models**, side-by-side.")
 
-uploaded_file = st.file_uploader("Upload image...", type=["png", "jpg", "jpeg"])
+uploaded_file = st.file_uploader("📤 Upload a clothing image", type=["png", "jpg", "jpeg"])
 
-# Model selection dropdown
-selected_model_file = st.selectbox("Choose a model to use:", MODEL_FILES)
-
-if uploaded_file and selected_model_file:
+if uploaded_file:
     image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    model = load_model(selected_model_file)
+    # Display smaller image
+    st.image(image, caption="Uploaded Image", width=200)
+
     preprocessed = preprocess_image(image)
 
-    prediction = model.predict(preprocessed)[0]
-    predicted_class = class_names[np.argmax(prediction)]
-    confidence = np.max(prediction) * 100
+    # Collect predictions
+    rows = []
+    for model_name, model in models.items():
+        preds = model.predict(preprocessed)[0]
+        pred_idx = np.argmax(preds)
+        pred_label = class_names[pred_idx]
+        confidence = preds[pred_idx] * 100
+        rows.append({
+            "Model": model_name,
+            "Predicted Class": pred_label,
+            "Confidence (%)": round(confidence, 2)
+        })
 
-    st.subheader("🔍 Prediction")
-    st.write(f"**{selected_model_file}** predicted: **{predicted_class}** ({confidence:.2f}%)")
+    # Display comparison table
+    df = pd.DataFrame(rows)
+    st.subheader("📊 Prediction Table")
+    st.dataframe(df.sort_values("Confidence (%)", ascending=False), use_container_width=True)
 
-    # Optional: show full confidence scores
-    if st.checkbox("Show confidence for all classes"):
-        for i, prob in enumerate(prediction):
-            st.write(f"{class_names[i]}: {prob * 100:.2f}%")
+    # Optional: Confidence chart
+    if st.checkbox("📈 Show confidence bar chart"):
+        fig, ax = plt.subplots(figsize=(8, 6))
+        df_sorted = df.sort_values("Confidence (%)", ascending=False)
+        ax.barh(df_sorted["Model"], df_sorted["Confidence (%)"], color='skyblue')
+        ax.set_xlabel("Confidence (%)")
+        ax.set_title("Top Prediction Confidence by Model")
+        st.pyplot(fig)
