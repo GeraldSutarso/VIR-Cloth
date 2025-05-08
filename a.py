@@ -30,7 +30,7 @@ MODEL_FILES = [
     "fashion_mnist_cnn_model_SGD_100.h5",
 ]
 
-# Load all models
+# Load all models (cached)
 @st.cache_resource
 def load_models():
     models = {}
@@ -41,7 +41,7 @@ def load_models():
 
 models = load_models()
 
-# Preprocessing: 128x128 grayscale
+# Image preprocessing (128x128 grayscale)
 def preprocess_image(image: Image.Image):
     image = image.convert("L")
     image = image.resize((128, 128))
@@ -49,36 +49,53 @@ def preprocess_image(image: Image.Image):
     img_array = img_array.reshape(1, 128, 128, 1)
     return img_array
 
-# Streamlit UI
-st.title("👕 Fashion MNIST – Full Model & Class Comparison")
-st.write("Upload an image to view **class-wise confidence scores** for all models.")
+# App UI
+st.title("🧠 Fashion MNIST – Model Predictions")
+st.write("Upload an image to classify it using one or more trained models.")
 
 uploaded_file = st.file_uploader("📤 Upload a clothing image", type=["png", "jpg", "jpeg"])
 
 if uploaded_file:
     image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Image", width=200)
+    st.image(image, caption="🖼️ Uploaded Image", width=200)
 
     preprocessed = preprocess_image(image)
 
-    # Prepare full confidence matrix
-    confidence_data = []
+    comparison_mode = st.checkbox("🔄 Compare all models")
 
-    for model_name, model in models.items():
+    if comparison_mode:
+        # Compare all models: show full class-confidence table
+        confidence_data = []
+        for model_name, model in models.items():
+            preds = model.predict(preprocessed)[0]
+            row = {
+                "Model": model_name,
+                **{class_names[i]: round(preds[i] * 100, 2) for i in range(len(class_names))}
+            }
+            confidence_data.append(row)
+        df = pd.DataFrame(confidence_data)
+
+        st.subheader("📋 Class Confidence Table (All Models)")
+        st.dataframe(df.set_index("Model"), use_container_width=True)
+
+        if st.checkbox("📊 Show Heatmap"):
+            fig, ax = plt.subplots(figsize=(12, 6))
+            sns.heatmap(df.set_index("Model"), annot=True, fmt=".1f", cmap="Blues", ax=ax)
+            ax.set_title("Class Confidence Heatmap")
+            st.pyplot(fig)
+    else:
+        # Single model mode: dropdown selection
+        selected_model_file = st.selectbox("📌 Choose a model", MODEL_FILES)
+        model = models[selected_model_file]
+
         preds = model.predict(preprocessed)[0]
-        confidence_row = {
-            "Model": model_name,
-            **{class_names[i]: round(preds[i] * 100, 2) for i in range(len(class_names))}
-        }
-        confidence_data.append(confidence_row)
+        pred_index = np.argmax(preds)
+        pred_class = class_names[pred_index]
+        confidence = preds[pred_index] * 100
 
-    df_confidence = pd.DataFrame(confidence_data)
-    st.subheader("📋 Class Confidence Table")
-    st.dataframe(df_confidence.set_index("Model"), use_container_width=True)
+        st.subheader("🔍 Prediction")
+        st.write(f"**{selected_model_file}** predicts: **{pred_class}** ({confidence:.2f}%)")
 
-    # Optional: heatmap
-    if st.checkbox("📊 Show heatmap of class confidence scores"):
-        fig, ax = plt.subplots(figsize=(12, 6))
-        sns.heatmap(df_confidence.set_index("Model"), annot=True, fmt=".1f", cmap="Blues", cbar=True, ax=ax)
-        ax.set_title("Class Confidence Scores by Model")
-        st.pyplot(fig)
+        if st.checkbox("🔢 Show all class confidences"):
+            for i, prob in enumerate(preds):
+                st.write(f"{class_names[i]}: {prob * 100:.2f}%")
